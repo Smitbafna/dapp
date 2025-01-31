@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/dapp3_backend"
+]
+resolver = "2"
