@@ -1,3 +1,15 @@
-service : {
-    "greet": (text) -> (text) query;
+service : (principal) -> {
+  clear_participants : () -> ();
+  clear_state : () -> ();
+  create_commitment : (text) -> ();
+  end_commitment_phase : () -> ();
+  generate_and_set_winner : () -> (nat64);
+  get_commitment_phase_status : () -> (bool) query;
+  get_generated_numbers : () -> (vec nat64) query;
+  get_moderator : () -> (opt text) query;
+  get_participants : () -> (vec text) query;
+  get_rng_seed : () -> (nat64) query;
+  make_moderator : () -> ();
+  participant_joins : () -> ();
+  start_commitment_phase : () -> ();
 }
