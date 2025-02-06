@@ -1,0 +1,21 @@
+.footer-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    padding-bottom: 1rem;
+  }
+  
+  .footer-wrapper .footer-text {
+    margin: 0 0 0.35em;
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 21px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+  }
+  

@@ -1,15 +1,27 @@
+type LotteryPublicInfo = record {
+  commit_phase : bool;
+  purpose : LotteryPurpose;
+};
+type LotteryPurpose = variant {
+  Custom : text;
+  Fundraiser;
+  Entertainment;
+  DAOTreasury;
+};
 service : (principal) -> {
-  clear_participants : () -> ();
+  buy_tickets : (text, nat64) -> ();
   clear_state : () -> ();
-  create_commitment : (text) -> ();
-  end_commitment_phase : () -> ();
-  generate_and_set_winner : () -> (nat64);
-  get_commitment_phase_status : () -> (bool) query;
-  get_generated_numbers : () -> (vec nat64) query;
-  get_moderator : () -> (opt text) query;
-  get_participants : () -> (vec text) query;
-  get_rng_seed : () -> (nat64) query;
-  make_moderator : () -> ();
-  participant_joins : () -> ();
-  start_commitment_phase : () -> ();
+  create_commitment : (text, text) -> ();
+  create_new_lottery : (text, nat64) -> ();
+  end_commitment_phase : (text) -> ();
+  generate_and_set_winner : (text) -> (nat64);
+  get_all_lotteries : () -> (vec record { text; LotteryPublicInfo }) query;
+  get_all_lottery_moderators : () -> (vec record { text; opt text }) query;
+  get_commitment_phase : (text) -> (bool) query;
+  get_lottery_moderator : (text) -> (opt text) query;
+  get_participant_lotteries : () -> (vec record { text; nat64 }) query;
+  get_verification_hash : (text) -> (opt text) query;
+  get_winner : (text) -> (opt text) query;
+  participant_joins : (text) -> ();
+  start_commitment_phase : (text) -> ();
 }

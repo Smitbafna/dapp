@@ -1,0 +1,120 @@
+/* FullPageCenter */
+.full-page-center {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background-color: #111111;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+/* TextStyle */
+.text-style {
+  color: white;
+  margin-bottom: 2em;
+  font-size: 2em;
+}
+
+/* ButtonSm */
+.button-sm {
+  color: white;
+  padding: 0.25em 1em;
+  margin: 0.25em;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: #5dbb63;
+  cursor: pointer;
+  justify-content: center;
+  display: flex;
+  border: none;
+  outline: none;
+}
+
+/* LogoutButton */
+.logout-button {
+  color: black;
+  margin-top: 2rem;
+  padding: 0.25em 1em;
+  border-radius: 8px;
+  font-size: 1em;
+  background: white;
+  cursor: pointer;
+  justify-content: center;
+  display: flex;
+}
+
+/* ProposalsWrapper */
+.proposals-wrapper .select-dropdown {
+  text-align: center;
+  color: white;
+  padding: 0.25em 1em;
+  margin: 0.25em;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: #5dbb63;
+  cursor: pointer;
+  justify-content: center;
+  display: flex;
+  border: none;
+  outline: none;
+}
+
+.proposals-wrapper .proposal-data {
+  font-size: 0.75rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.proposals-wrapper .actions-headers {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.proposals-wrapper .flex-container {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.proposals-wrapper .center {
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.proposals-wrapper .title {
+  padding: 0;
+  margin: 0;
+}
+
+.proposals-wrapper .actions-title {
+  padding-top: 0.5rem;
+}
+
+.proposals-wrapper .highlight {
+  background: #ffa500;
+}
+
+/* StyledTable */
+.styled-table th,
+.styled-table td {
+  text-align: center;
+  padding: 8px;
+  max-width: 200px;
+  overflow-wrap: break-word;
+}
+
+/* ContextVariablesContainer */
+.context-variables-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.context-variables-container .context-variables {
+  padding-left: 1rem;
+  padding-right: 1rem;
+  text-align: center;
+}

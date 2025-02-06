@@ -1,0 +1,22 @@
+/* Actions.css */
+.grid-list {
+    display: grid;
+    gap: 0.5rem;
+  }
+  
+  .bg-color {
+    background: #ffa500;
+  }
+  
+  .grid-list[data-columns='2'] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .grid-list[data-columns='3'] {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .grid-list[data-columns='5'] {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  

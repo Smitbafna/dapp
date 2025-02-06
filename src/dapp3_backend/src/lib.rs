@@ -2,13 +2,15 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 use candid::Principal;
 // use ic_ledger_types::{AccountIdentifier, Memo, Subaccount, Tokens, TransferArgs, TransferError};
-use candid::{Deserialize};
+use candid::{CandidType,Deserialize};
 use serde::Serialize;
 use ic_cdk::trap;
 use ic_cdk::caller;
 use rand::Rng;  // This imports the Rng trait which includes gen_range
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use ic_cdk::api::time;
+use sha2::{Sha256, Digest}; 
 
 
 #[derive(Debug,Serialize, Deserialize, Clone)]
@@ -18,29 +20,42 @@ pub struct Commit {
     pub number: Option<u128>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, CandidType)]
+pub struct LotteryPublicInfo {
+    pub commit_phase: bool,
+    pub purpose: LotteryPurpose, 
+}
+
+#[derive(CandidType,Clone, Debug)]
+pub enum LotteryPurpose {
+    Entertainment,
+    Fundraiser,
+    DAOTreasury,
+    Custom(String), 
+}
+
+#[derive(CandidType,Clone, Debug)]
 pub struct Lottery {
     pub commit_phase: bool,
-    pub participants: HashMap<Principal, Commit>,
     pub winning_number: Option<u64>,
-    pub rng_seed: u64, // Store the seed for RNG
-    pub generated_numbers: Vec<u64>, // Store generated numbers for auditing
-
+    pub rng_seed: u64,
+    pub generated_numbers: Vec<u64>,
+    pub purpose: LotteryPurpose, 
+    pub ticket_price: u64,
+    pub prize_pool:u64,
 }
+
 
 thread_local! {
     static LEDGER_ID: RefCell<Option<Principal>> = RefCell::new(None);
-    static PARTICIPANTS: RefCell<Vec<String>> = RefCell::new(Vec::new());
-    static COMMITMENT_PHASE: RefCell<bool> = RefCell::new(false);
-    static COMMITMENTS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new()); // Map for commitments
-    static LOTTERY_STATE: RefCell<Lottery> = RefCell::new(Lottery {
-        commit_phase: false,
-        participants: HashMap::new(),
-        winning_number: None,
-        rng_seed: 123456789, // Example initial seed
-        generated_numbers: Vec::new(),
-    });
-    static MODERATOR: RefCell<Option<String>> = RefCell::new(None); 
+    static PARTICIPANTS: RefCell<Vec<(String, Vec<(String, u64)>)>> = RefCell::new(Vec::new());
+    static COMMITMENT_PHASE: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
+    static COMMITMENTS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new()); 
+    static LOTTERIES: RefCell<HashMap<String, Lottery>> = RefCell::new(HashMap::new()); 
+    static MODERATORS: RefCell<HashMap<String, Option<String>>> = RefCell::new(HashMap::new());
+    static WINNERS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    static VERIFICATION_HASHES: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+
 }
 
 #[ic_cdk::init]
@@ -51,122 +66,122 @@ fn init(ledger_id: Principal) {
 }
 
 
-#[ic_cdk::update]
-fn participant_joins() {
-    // Get the caller's principal as a unique identifier
-    let caller_principal = caller().to_string(); // Convert the principal to a string
 
-    // Add the caller's principal to the participants list
+
+#[ic_cdk::update]
+fn create_new_lottery(purpose: String,ticket_price:u64) {
+   
+    let caller_principal = caller().to_string();
+
+   
+    let lottery_purpose = match purpose.as_str() {
+        "Entertainment" => LotteryPurpose::Entertainment,
+        "Fundraiser" => LotteryPurpose::Fundraiser,
+        "DAOTreasury" => LotteryPurpose::DAOTreasury,
+        _ => LotteryPurpose::Custom(purpose), 
+    };
+    
+    let system_time = time(); // Current system time in milliseconds since epoch
+
+    // Combine both sources (could be hashed or simply concatenated)
+    let initial_seed = (system_time as u64) ^ caller_principal.len() as u64;
+    
+    let lottery = Lottery {
+        commit_phase: false,
+        winning_number: None,
+        rng_seed: initial_seed, 
+        generated_numbers: Vec::new(),
+        purpose: lottery_purpose,
+        ticket_price,
+        prize_pool:0,
+    };
+
+    
+    let lottery_id = format!("lottery_{}_{}", caller_principal, ic_cdk::api::time());
+
+   
+    LOTTERIES.with(|lotteries| {
+        let mut lotteries_ref = lotteries.borrow_mut();
+        lotteries_ref.insert(lottery_id.clone(), lottery);
+    });
+   
+    MODERATORS.with(|moderators| {
+        let mut moderators_ref = moderators.borrow_mut();
+        moderators_ref.insert(lottery_id, Some(caller_principal));
+    });
+}
+
+
+#[ic_cdk::query]
+fn get_all_lotteries() -> Vec<(String, LotteryPublicInfo)> {
+    LOTTERIES.with(|lotteries| {
+        lotteries.borrow().iter().map(|(lottery_id, lottery)| {
+          
+            (
+                lottery_id.clone(),
+                LotteryPublicInfo {
+                    commit_phase: lottery.commit_phase,
+                    purpose: lottery.purpose.clone(),
+                },
+            )
+        }).collect()
+    })
+}
+
+
+
+
+#[ic_cdk::update]
+fn participant_joins(lottery_id: String) {
+    
+    let caller_principal = caller().to_string();
+
+   
     PARTICIPANTS.with(|participants| {
         let mut participants_ref = participants.borrow_mut();
-        
-        // Check if the caller has already joined (optional validation)
-        if participants_ref.contains(&caller_principal) {
-            trap("This participant has already joined.");
+
+       
+        if let Some(participant) = participants_ref.iter_mut().find(|(principal, _)| *principal == caller_principal) {
+           
+            if !participant.1.iter().any(|(id, _)| *id == lottery_id) {
+                
+                participant.1.push((lottery_id, 0));
+            }
         } else {
-            // Add the new participant's principal
-            participants_ref.push(caller_principal);
+           
+            participants_ref.push((caller_principal.clone(), vec![(lottery_id, 0)]));
         }
     });
 }
 
-#[ic_cdk::query]
-fn get_participants() -> Vec<String> {
-    // Return the list of participants
-    PARTICIPANTS.with(|participants| participants.borrow().clone())
-}
+
+
 
 #[ic_cdk::update]
-fn clear_participants() {
-    // Clear all participants (useful for testing or resetting)
-    PARTICIPANTS.with(|participants| participants.borrow_mut().clear());
-}
-
-#[ic_cdk::update]
-fn make_moderator() {
+fn buy_tickets(lottery_id: String, num_tickets: u64) {
     
     let caller_principal = caller().to_string();
 
-    
-    MODERATOR.with(|moderator| {
-        let mut moderator_ref = moderator.borrow_mut();
-      
-            *moderator_ref = Some(caller_principal.clone());
+   
+    if num_tickets == 0 {
+        trap("You must buy at least one ticket.");
+    }
 
-            // Optionally, ensure the moderator is also in the participant list
-            PARTICIPANTS.with(|participants| {
-                let mut participants_ref = participants.borrow_mut();
-                if !participants_ref.contains(&caller_principal) {
-                    participants_ref.push(caller_principal);
-                }
-            });
-        
-    });
-}
-
-#[ic_cdk::update]
-fn start_commitment_phase() {
-    let caller_principal = caller().to_string();
-
-    // Ensure the caller is the moderator
-    MODERATOR.with(|moderator| {
-        let moderator_ref = moderator.borrow();
-        if moderator_ref.as_ref() != Some(&caller_principal) {
-            trap("Only the moderator can start the commitment phase.");
-        }
-    });
-
-    // Start the commitment phase
-    COMMITMENT_PHASE.with(|phase| {
-        let mut phase_ref = phase.borrow_mut();
-        if *phase_ref {
-            trap("The commitment phase has already started.");
-        } else {
-            *phase_ref = true;
-        }
-    });
-}
-
-
-#[ic_cdk::query]
-fn get_commitment_phase_status() -> bool {
-    // Return the status of the commitment phase
-    COMMITMENT_PHASE.with(|phase| *phase.borrow())
-}
-
-#[ic_cdk::query]
-fn get_moderator() -> Option<String> {
-    // Return the moderator's principal
-    MODERATOR.with(|moderator| moderator.borrow().clone())
-}
-
-
-
-#[ic_cdk::update]
-fn create_commitment(commitment: String) {
-    let caller_principal = caller().to_string();
-
-    // Ensure the commitment phase is active
-    COMMITMENT_PHASE.with(|phase| {
-        if !*phase.borrow() {
-            trap("The commitment phase is not active.");
-        }
-    });
-
-    // Ensure the caller is a participant
+   
     PARTICIPANTS.with(|participants| {
-        if !participants.borrow().contains(&caller_principal) {
-            trap("Only participants can create commitments.");
-        }
-    });
+        let mut participants_ref = participants.borrow_mut();
 
-    // Add the commitment to the map
-    COMMITMENTS.with(|commitments| {
-        let mut commitments_ref = commitments.borrow_mut();
-        if commitments_ref.contains_key(&caller_principal) {
-            trap("You have already submitted your commitment.");
+        
+        if let Some(participant) = participants_ref.iter_mut().find(|(principal, _)| *principal == caller_principal) {
+           
+            if let Some(lottery) = participant.1.iter_mut().find(|(id, _)| *id == lottery_id) {
+               
+                lottery.1 += num_tickets;
+            } else {
+                trap("You are not participating in this lottery.");
+            }
         } else {
-            commitments_ref.insert(caller_principal, commitment);
+            trap("Participant not found.");
         }
     });
 }
@@ -174,103 +189,23 @@ fn create_commitment(commitment: String) {
 
 
 
+#[ic_cdk::query]
+fn get_participant_lotteries() -> Vec<(String, u64)> {
+   
+    let caller_principal = caller().to_string(); 
 
+    
+    PARTICIPANTS.with(|participants| {
+        let participants_ref = participants.borrow();
 
-
-
-#[ic_cdk::update]
-fn end_commitment_phase() {
-    let caller_principal = caller().to_string();
-
-    // Ensure the caller is the moderator
-    MODERATOR.with(|moderator| {
-        let moderator_ref = moderator.borrow();
-        if moderator_ref.as_ref() != Some(&caller_principal) {
-            trap("Only the moderator can end the commitment phase.");
-        }
-    });
-
-    // End the commitment phase
-    COMMITMENT_PHASE.with(|phase| {
-        let mut phase_ref = phase.borrow_mut();
-        if !*phase_ref {
-            trap("The commitment phase is not currently active.");
+        
+        if let Some(participant) = participants_ref.iter().find(|(principal, _)| *principal == caller_principal) {
+           
+            participant.1.iter().map(|(lottery_id, num_tickets)| (lottery_id.clone(), *num_tickets)).collect()
         } else {
-            *phase_ref = false;
+            
+            Vec::new()
         }
-    });
-
-    // Optional: Log or handle the end of the phase
-    ic_cdk::println!("Commitment phase has ended.");
-}
-
-
-// Function to get all generated random numbers for auditing
-#[ic_cdk::query]
-fn get_generated_numbers() -> Vec<u64> {
-    LOTTERY_STATE.with(|state| state.borrow().generated_numbers.clone())
-}
-
-// Function to get the current RNG seed (for auditing purposes)
-#[ic_cdk::query]
-fn get_rng_seed() -> u64 {
-    LOTTERY_STATE.with(|state| state.borrow().rng_seed)
-}
-
-
-
-fn generate_random_number(num_participants: usize, rng_seed: u64) -> u64 {
-    // Seed the RNG
-    let mut rng = StdRng::seed_from_u64(rng_seed);
-
-    // Generate a random number and directly cast it to u64
-    let random_number: u64 = rng.gen_range(0..num_participants) as u64;
-
-    // Return the random number
-    random_number
-}
-
-#[ic_cdk::update]
-fn generate_and_set_winner() -> u64 {
-    LOTTERY_STATE.with(|state| {
-        let mut state_ref = state.borrow_mut();
-
-        // Get the total number of participants
-        let num_participants = state_ref.participants.len();
-
-        if num_participants == 0 {
-            ic_cdk::trap("No participants in the lottery.");
-        }
-
-        // Generate a random index
-        let random_index = generate_random_number(num_participants, state_ref.rng_seed) as usize;
-
-        // Store the random number for auditing purposes
-        state_ref.generated_numbers.push(random_index as u64);
-
-        // Update the RNG seed for future use
-        state_ref.rng_seed = random_index as u64;
-
-        // Convert HashMap keys to a Vec for indexed access
-        let keys: Vec<Principal> = state_ref.participants.keys().cloned().collect();
-
-        // Retrieve the winner's key
-        let winner_key = keys.get(random_index).expect("Invalid random index.");
-
-        // Retrieve the winner's commitment
-        let winner_commitment = state_ref
-            .participants
-            .get(winner_key)
-            .expect("Failed to get the winner's commitment.");
-
-        // Log the winner's commitment for auditing
-        ic_cdk::println!("Winner Principal: {}, Commitment: {:?}", winner_key, winner_commitment);
-
-        // Set the winning number
-        state_ref.winning_number = Some(random_index as u64);
-
-        // Return the random number (index)
-        random_index as u64
     })
 }
 
@@ -279,14 +214,275 @@ fn generate_and_set_winner() -> u64 {
 
 
 
+
+
+#[ic_cdk::update]
+fn start_commitment_phase(lottery_id: String) {
+    let caller_principal = caller().to_string();
+
+   
+    MODERATORS.with(|moderators| {
+        let moderators_ref = moderators.borrow();
+        
+        match moderators_ref.get(&lottery_id) {
+            Some(Some(moderator)) if moderator == &caller_principal => {
+               
+            }
+            _ => trap("Only the moderator of this lottery can start the commitment phase."),
+        }
+    });
+
+  
+    COMMITMENT_PHASE.with(|phase| {
+        let mut phase_ref = phase.borrow_mut();
+        if let Some(true) = phase_ref.get(&lottery_id) {
+            trap("The commitment phase has already started.");
+        } else {
+            phase_ref.insert(lottery_id, true);
+        }
+    });
+}
+
+
+
+#[ic_cdk::query]
+fn get_commitment_phase(lottery_id: String) -> bool {
+    COMMITMENT_PHASE.with(|phase| {
+        let phase_ref = phase.borrow();
+        *phase_ref.get(&lottery_id).unwrap_or(&false) 
+    })
+}
+
+
+#[ic_cdk::query]
+fn get_all_lottery_moderators() -> Vec<(String, Option<String>)> {
+    MODERATORS.with(|moderators| {
+        moderators
+            .borrow()
+            .iter()
+            .map(|(lottery_id, moderator)| (lottery_id.clone(), moderator.clone()))
+            .collect()
+    })
+}
+
+#[ic_cdk::query]
+fn get_lottery_moderator(lottery_id: String) -> Option<String> {
+    MODERATORS.with(|moderators| {
+        moderators
+            .borrow()
+            .get(&lottery_id)
+            .cloned() 
+            .unwrap_or(None) 
+    })
+}
+
+
+
+#[ic_cdk::update]
+fn create_commitment(lottery_id: String, commitment: String) {
+    let caller_principal = caller().to_string();
+
+    
+    COMMITMENT_PHASE.with(|phase| {
+        let phase_ref = phase.borrow();
+        if !phase_ref.get(&lottery_id).copied().unwrap_or(false) {
+            trap("The commitment phase is not active for this lottery.");
+        }
+    });
+
+    
+    PARTICIPANTS.with(|participants| {
+        let participants_ref = participants.borrow();
+        
+     
+        let lottery_participants = participants_ref.iter().find(|(id, _)| id == &lottery_id);
+        
+    
+        if let Some((_, participant_list)) = lottery_participants {
+            let is_participant = participant_list.iter().any(|(participant_id, _)| participant_id == &caller_principal);
+            
+            if !is_participant {
+                trap("Only participants of this lottery can create commitments.");
+            }
+        } else {
+            trap("The lottery ID is invalid or does not have any participants.");
+        }
+    });
+    
+    
+    COMMITMENTS.with(|commitments| {
+        let mut commitments_ref = commitments.borrow_mut();
+        let key = format!("{}_{}", lottery_id, caller_principal); 
+
+        if commitments_ref.contains_key(&key) {
+            trap("You have already submitted your commitment for this lottery.");
+        } else {
+            commitments_ref.insert(key, commitment);
+        }
+    });
+}
+
+
+
+
+
+
+
+#[ic_cdk::update]
+fn end_commitment_phase(lottery_id: String) {
+    let caller_principal = caller().to_string();
+
+    
+    MODERATORS.with(|moderators| {
+        let moderators_ref = moderators.borrow();
+        match moderators_ref.get(&lottery_id) {
+            Some(Some(moderator)) if moderator == &caller_principal => {
+              
+            }
+            _ => trap("Only the moderator of this lottery can end the commitment phase."),
+        }
+    });
+
+    
+    COMMITMENT_PHASE.with(|phase| {
+        let mut phase_ref = phase.borrow_mut();
+        match phase_ref.get_mut(&lottery_id) {
+            Some(active) if *active => {
+                *active = false;
+                ic_cdk::println!("Commitment phase for lottery {} has ended.", lottery_id);
+            }
+            _ => trap("The commitment phase is not currently active for this lottery."),
+        }
+    });
+}
+
+
+fn generate_random_numbers_for_participants(num_participants: usize, rng_seed: u64) -> Vec<u64> {
+   
+    let mut rng = StdRng::seed_from_u64(rng_seed);
+
+   
+    let mut random_numbers: Vec<u64> = Vec::with_capacity(num_participants);
+
+    for _ in 0..num_participants {
+       
+        let random_number = rng.gen_range(0..u64::MAX);
+        random_numbers.push(random_number);
+    }
+
+   
+    random_numbers
+}
+
+
+#[ic_cdk::update]
+fn generate_and_set_winner(lottery_id: String) -> u64 {
+   
+    LOTTERIES.with(|lotteries| {
+        let mut lotteries_ref = lotteries.borrow_mut();
+        let lottery = lotteries_ref.get_mut(&lottery_id).expect("Lottery not found");
+
+       
+        let valid_participants = PARTICIPANTS.with(|participants| {
+            participants.borrow()
+                .iter()
+                .find(|(id, _)| id == &lottery_id)  
+                .map(|(_, participant_list)| {
+                    participant_list.iter()
+                        .filter(|(_, tickets)| *tickets > 0)  
+                        .map(|(id, tickets)| (id.clone(), *tickets)) 
+                        .collect::<Vec<(String, u64)>>()  
+                })
+                .unwrap_or_default() 
+        });
+
+        if valid_participants.is_empty() {
+            ic_cdk::trap("No participants with valid tickets.");
+        }
+
+        let num_participants = valid_participants.len();
+
+        
+        let random_numbers = generate_random_numbers_for_participants(num_participants, lottery.rng_seed);
+
+        
+        lottery.generated_numbers.extend(random_numbers.iter().cloned());
+
+        let last_random_number = *random_numbers.last().expect("Failed to get last random number.");
+
+      
+        lottery.rng_seed = last_random_number;
+
+        
+        let keys: Vec<String> = valid_participants.iter().map(|(id, _)| id.clone()).collect();
+
+        
+        let winner_index = (last_random_number as usize) % num_participants;
+
+        
+        let winner_key = keys.get(winner_index).expect("Invalid random index.");
+
+        let verification_string = format!("{}-{}-{}", lottery_id, winner_key, winner_index);
+        let mut hasher = Sha256::new();
+        hasher.update(verification_string.as_bytes());
+        let verification_hash = format!("{:x}", hasher.finalize());
+
+        let winner_commitment = valid_participants
+            .iter()
+            .find(|(id, _)| id == winner_key) 
+            .expect("Failed to get the winner's commitment.");
+
+      
+        ic_cdk::println!("Winner: {}, Commitment: {:?}", winner_key, winner_commitment);
+
+        
+        lottery.winning_number = Some(winner_index as u64);
+        WINNERS.with(|winners| {
+            winners.borrow_mut().insert(lottery_id.clone(), winner_key.clone());
+        });
+
+        VERIFICATION_HASHES.with(|hashes| {
+            hashes.borrow_mut().insert(lottery_id.clone(), verification_hash.clone());
+        });
+
+
+        
+        winner_index as u64
+    })
+}
+
+#[ic_cdk::query]
+fn get_winner(lottery_id: String) -> Option<String> {
+    
+    WINNERS.with(|winners| {
+        let winners_ref = winners.borrow();
+       
+        winners_ref.get(&lottery_id).cloned()
+    })
+}
+
+#[ic_cdk::query]
+fn get_verification_hash(lottery_id: String) -> Option<String> {
+    VERIFICATION_HASHES.with(|hashes| {
+        let hashes_ref = hashes.borrow();
+        hashes_ref.get(&lottery_id).cloned()
+    })
+}
+
+
 #[ic_cdk::update]
 fn clear_state() {
-    // Clear all participants, reset the moderator, and stop the commitment phase
+    LEDGER_ID.with(|ledger_id| *ledger_id.borrow_mut() = None);
     PARTICIPANTS.with(|participants| participants.borrow_mut().clear());
-    MODERATOR.with(|moderator| *moderator.borrow_mut() = None);
-    COMMITMENT_PHASE.with(|phase| *phase.borrow_mut() = false);
+    COMMITMENT_PHASE.with(|phase| phase.borrow_mut().clear());
     COMMITMENTS.with(|commitments| commitments.borrow_mut().clear());
+    LOTTERIES.with(|lotteries| lotteries.borrow_mut().clear());
+    MODERATORS.with(|moderators| moderators.borrow_mut().clear());
+
+    ic_cdk::println!("All state data has been cleared.");
 }
 
 
 ic_cdk::export_candid!();
+
+

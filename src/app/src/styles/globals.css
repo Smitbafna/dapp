@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add this in your global CSS or a specific component CSS file */
+@keyframes moveUp {
+    0% {
+      transform: translateY(50px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  /* Apply the animation to elements */
+  .animate-move-up {
+    animation: moveUp 1.5s ease-out forwards;
+  }
+  
+  @keyframes jump {
+    0% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-jump {
+    animation: jump 0.3s ease-in-out;
+  }
+  
+  /* Add this CSS to your global styles or as a CSS module */
+
+body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    background: linear-gradient(135deg,  rgba(121, 69, 181, 0.247), rgba(121, 204, 161, 0.5));
+    background-size: 200% 200%;
+   
+  }
+  
+  @keyframes auroraEffect {
+    0% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    100% {
+      background-position: 0% 0%;
+    }
+  }
+  

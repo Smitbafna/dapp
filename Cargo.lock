@@ -146,6 +146,7 @@ dependencies = [
  "ic-cdk-timers",
  "rand",
  "serde",
+ "sha2",
 ]
 
 [[package]]

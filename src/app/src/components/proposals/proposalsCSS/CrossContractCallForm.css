@@ -1,0 +1,35 @@
+/* CrossContractCallForm.css */
+
+.scroll-wrapper {
+    max-height: 150px;
+    overflow-y: auto;
+  }
+  
+  .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .form-group input {
+    padding: 0.5rem;
+    font-size: 1rem;
+    width: 100%;
+  }
+  
+  .button-sm {
+    padding: 0.5rem 1rem;
+    background-color: #666;
+    color: white;
+    border: none;
+    cursor: pointer;
+  }
+  
+  .button-sm:hover {
+    background-color: #444;
+  }
+  
+  .argument-wrapper {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+  }
+  

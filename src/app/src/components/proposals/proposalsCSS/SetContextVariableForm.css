@@ -1,0 +1,36 @@
+/* SetContextVariableForm.css */
+
+/* Scroll wrapper styles */
+.scroll-wrapper {
+    max-height: 150px;
+    overflow-y: auto;
+  }
+  
+  /* Container for each context variable */
+  .context-variable-container {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+  }
+  
+  /* Form group styles */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Input field styles */
+  .form-group input {
+    padding: 0.5rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    outline: none;
+    transition: border 0.2s ease-in-out;
+  }
+  
+  /* Focused input field */
+  .form-group input:focus {
+    border-color: #007bff;
+  }
+  
